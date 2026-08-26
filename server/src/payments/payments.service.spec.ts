@@ -1,18 +1,21 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, ConflictException } from '@nestjs/common';
+import { getQueueToken } from '@nestjs/bullmq';
 import { PaymentsService } from './payments.service';
 import { PAYMENT_REPOSITORY } from './repositories/payment-repository.interface';
 import { PaymentStatus } from './enums/payment-status.enum';
 import { Payment } from './entities/payment.entity';
+import {
+    PAYMENT_PROCESSING_QUEUE,
+    PROCESS_PAYMENT_JOB,
+} from './processing/payment-processing.queue';
 
 /**
  * Unit tests for `PaymentsService`.
  *
- * The repository is fully mocked here — these tests exercise only the
- * business logic (creation, retrieval, and state-machine transitions),
- * completely independent of any real storage mechanism. This is what
- * makes the interface-based repository design pay off: no real Map,
- * file, or database is involved in these tests at all.
+ * The repository AND the BullMQ queue are fully mocked here — these
+ * tests exercise only the business logic, with no real Redis
+ * connection, no real storage, and no real worker involved.
  */
 describe('PaymentsService', () => {
     let service: PaymentsService;
@@ -22,6 +25,7 @@ describe('PaymentsService', () => {
         update: jest.Mock;
         findAll: jest.Mock;
     };
+    let mockQueue: { add: jest.Mock };
 
     const buildPayment = (overrides: Partial<Payment> = {}): Payment => ({
         id: 'payment-1',
@@ -40,11 +44,16 @@ describe('PaymentsService', () => {
             update: jest.fn(),
             findAll: jest.fn(),
         };
+        mockQueue = { add: jest.fn().mockResolvedValue(undefined) };
 
         const module: TestingModule = await Test.createTestingModule({
             providers: [
                 PaymentsService,
                 { provide: PAYMENT_REPOSITORY, useValue: mockRepository },
+                {
+                    provide: getQueueToken(PAYMENT_PROCESSING_QUEUE),
+                    useValue: mockQueue,
+                },
             ],
         }).compile();
 
@@ -59,13 +68,29 @@ describe('PaymentsService', () => {
 
             const result = await service.createPayment({
                 amount: 2500,
-                currency: 'ngn', // lowercase input — service should normalize it
+                currency: 'ngn',
             });
 
             expect(result.status).toBe(PaymentStatus.PENDING);
-            expect(result.currency).toBe('NGN'); // normalized to uppercase
+            expect(result.currency).toBe('NGN');
             expect(result.id).toEqual(expect.any(String));
             expect(mockRepository.create).toHaveBeenCalledTimes(1);
+        });
+
+        it('enqueues a process-payment job after saving the payment', async () => {
+            mockRepository.create.mockImplementation((payment: Payment) =>
+                Promise.resolve(payment),
+            );
+
+            const result = await service.createPayment({
+                amount: 2500,
+                currency: 'NGN',
+            });
+
+            expect(mockQueue.add).toHaveBeenCalledTimes(1);
+            expect(mockQueue.add).toHaveBeenCalledWith(PROCESS_PAYMENT_JOB, {
+                paymentId: result.id,
+            });
         });
     });
 
@@ -127,8 +152,6 @@ describe('PaymentsService', () => {
                 service.updateStatus('payment-1', PaymentStatus.PENDING),
             ).rejects.toThrow(ConflictException);
 
-            // The repository must never be asked to persist an illegal
-            // transition — the rejection has to happen before any write.
             expect(mockRepository.update).not.toHaveBeenCalled();
         });
 

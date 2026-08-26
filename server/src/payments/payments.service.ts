@@ -5,19 +5,26 @@ import {
     NotFoundException,
     ConflictException,
 } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { randomUUID } from 'node:crypto';
 import { Payment } from './entities/payment.entity';
 import { PaymentStatus } from './enums/payment-status.enum';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { PAYMENT_REPOSITORY } from './repositories/payment-repository.interface';
 import type { PaymentRepository } from './repositories/payment-repository.interface';
+import {
+    PAYMENT_PROCESSING_QUEUE,
+    PROCESS_PAYMENT_JOB,
+    ProcessPaymentJobData,
+} from './processing/payment-processing.queue';
 
 /**
  * Declares which status transitions are legal, keyed by the current
  * status. This is the single source of truth for the payment state
- * machine — both the (future) automatic processing engine and manual
- * `PATCH` requests are validated against this same map, so there is
- * only one set of rules to reason about, not two.
+ * machine — both the `PaymentProcessingProcessor` (BullMQ worker) and
+ * manual `PATCH` requests are validated against this same map, so
+ * there is only one set of rules to reason about, not two.
  *
  * COMPLETED and FAILED map to empty arrays: they are terminal states,
  * so no further transition is ever valid from them.
@@ -32,13 +39,14 @@ const ALLOWED_TRANSITIONS: Record<PaymentStatus, PaymentStatus[]> = {
 /**
  * Core business logic for payments.
  *
- * This service depends only on the `PaymentRepository` interface
- * (injected via the `PAYMENT_REPOSITORY` token), never on a concrete
- * storage implementation — so it can be unit tested with a mock
- * repository and works unchanged regardless of which repository
- * implementation is wired up in `PaymentsModule`.
- *
- * Controllers should stay thin and delegate all actual logic here.
+ * This service depends on the `PaymentRepository` interface (injected
+ * via the `PAYMENT_REPOSITORY` token) and on a BullMQ `Queue`, never
+ * on `PaymentProcessingProcessor` directly. That decoupling matters:
+ * the processor needs to call back into this service (via
+ * `updateStatus`) once it finishes a job, so if this service also
+ * depended directly on the processor, we'd have a circular
+ * dependency. Instead, this service only enqueues a job and moves
+ * on — it has no idea what consumes the queue or how.
  */
 @Injectable()
 export class PaymentsService {
@@ -47,15 +55,20 @@ export class PaymentsService {
     constructor(
         @Inject(PAYMENT_REPOSITORY)
         private readonly paymentRepository: PaymentRepository,
+        @InjectQueue(PAYMENT_PROCESSING_QUEUE)
+        private readonly processingQueue: Queue<ProcessPaymentJobData>,
     ) { }
 
     /**
-     * Creates a new payment in PENDING status.
+     * Creates a new payment in PENDING status, then enqueues a
+     * `process-payment` job so that `PaymentProcessingProcessor`
+     * (running as a separate BullMQ worker) can pick up the
+     * asynchronous processing simulation.
      *
-     * Note: this method does NOT yet trigger the asynchronous processing
-     * simulation — that integration is added in a later step once the
-     * `ProcessingEngine` exists. For now, a created payment simply sits
-     * in PENDING until something explicitly moves it forward.
+     * The job is durably stored in Redis the moment `queue.add`
+     * resolves — if the app crashes immediately after this method
+     * returns, the job is not lost; it will still be processed once the
+     * worker (or a restarted instance of it) comes back up.
      */
     async createPayment(dto: CreatePaymentDto): Promise<Payment> {
         const now = new Date();
@@ -71,6 +84,11 @@ export class PaymentsService {
 
         const created = await this.paymentRepository.create(payment);
         this.logger.log(`Payment ${created.id} created (status=PENDING)`);
+
+        await this.processingQueue.add(PROCESS_PAYMENT_JOB, {
+            paymentId: created.id,
+        });
+
         return created;
     }
 
@@ -97,9 +115,9 @@ export class PaymentsService {
      *
      * This is the single method that changes a payment's status —
      * whether the caller is a human hitting `PATCH /payments/:id/status`
-     * or (in a later step) the processing engine completing its
-     * simulation. Centralizing it here means the transition rules are
-     * enforced exactly once, regardless of the trigger.
+     * or `PaymentProcessingProcessor` reporting a job result.
+     * Centralizing it here means the transition rules are enforced
+     * exactly once, regardless of the trigger.
      *
      * @throws NotFoundException if the payment doesn't exist.
      * @throws ConflictException if the requested transition is not legal

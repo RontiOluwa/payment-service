@@ -1,0 +1,25 @@
+# Provides Redis, required for BullMQ-based asynchronous payment
+# processing.
+#
+# Usage:
+#   docker compose up -d      # start Redis in the background
+#   docker compose down       # stop it
+#   docker compose down -v    # stop it and delete persisted queue data
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: payment-service-redis
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  redis-data:
