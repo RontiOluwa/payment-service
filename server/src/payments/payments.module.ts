@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { PAYMENT_REPOSITORY } from './repositories/payment-repository.interface';
 import { InMemoryPaymentRepository } from './repositories/in-memory-payment.repository';
+import { PaymentsService } from './payments.service';
 
 /**
  * Feature module for everything payment-related.
@@ -12,14 +13,14 @@ import { InMemoryPaymentRepository } from './repositories/in-memory-payment.repo
  * nothing in `PaymentsService` or the controller is aware of which
  * implementation is actually in use.
  */
-
 @Module({
     providers: [
         {
             provide: PAYMENT_REPOSITORY,
             useClass: InMemoryPaymentRepository,
         },
+        PaymentsService,
     ],
-    exports: [PAYMENT_REPOSITORY],
+    exports: [PaymentsService],
 })
 export class PaymentsModule { }
