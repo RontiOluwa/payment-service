@@ -1,6 +1,6 @@
-import { Logger } from '@nestjs/common';
+import { ConflictException, Logger } from '@nestjs/common';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Job } from 'bullmq';
+import { Job, UnrecoverableError } from 'bullmq';
 import { PaymentsService } from '../payments.service';
 import { PaymentStatus } from '../enums/payment-status.enum';
 import {
@@ -24,18 +24,30 @@ const SUCCESS_PROBABILITY = 0.8;
  * BullMQ worker that simulates an external payment gateway's
  * asynchronous processing.
  *
+ * This replaces the earlier in-process `EventEmitter2`-based
+ * `ProcessingEngine`. The behavior (PENDING -> PROCESSING -> outcome,
+ * after a randomized delay) is identical — what's different is that
+ * jobs now live in Redis, not just in this process's memory:
+ *
+ *  - If the app crashes after a payment is created but before this
+ *    worker finishes processing it, the job is NOT lost — it remains
+ *    in Redis and is picked up again (BullMQ redelivers unacknowledged
+ *    jobs), unlike the old in-memory event which would simply vanish.
+ *  - This worker process could be scaled independently of the HTTP
+ *    API process in a real deployment — e.g. running N worker
+ *    instances consuming the same queue under heavy processing load.
+ *  - Failed jobs (e.g. an unexpected exception, not a simulated
+ *    "FAILED" payment outcome — those are two different things) get
+ *    BullMQ's built-in retry/backoff — EXCEPT when the failure is a
+ *    `ConflictException` from the state machine (payment already
+ *    terminal), which is deliberately marked unrecoverable rather
+ *    than retried, since retrying can never succeed for that case.
+ *
  * In a real system, this role would be played by a webhook received
  * from an actual payment provider (Stripe/Paystack/Flutterwave). For
  * this assessment, a randomized delay + randomized outcome is a
  * reasonable stand-in that still forces the rest of the system (state
  * machine, client polling) to handle genuine asynchronous behavior.
- *
- * Because jobs live in Redis (not just process memory):
- *  - A crash between payment creation and job completion does not
- *    lose the job — BullMQ redelivers unacknowledged jobs.
- *  - This worker could scale independently of the HTTP API process.
- *  - Failures get BullMQ's built-in retry/backoff rather than
- *    disappearing silently.
  */
 @Processor(PAYMENT_PROCESSING_QUEUE)
 export class PaymentProcessingProcessor extends WorkerHost {
@@ -48,20 +60,49 @@ export class PaymentProcessingProcessor extends WorkerHost {
     /**
      * Entry point BullMQ calls for every job pulled off the queue.
      *
-     * Any error thrown here is treated by BullMQ as a job failure and
-     * triggers its retry/backoff behavior — errors are deliberately
-     * allowed to propagate rather than being caught here.
+     * Two error cases are handled differently here, which matters a lot
+     * in practice:
+     *
+     *  - A `ConflictException` from `updateStatus` means the payment is
+     *    already in a terminal state — most likely because a manual
+     *    `PATCH /payments/:id/status` request raced this job and got
+     *    there first. This is NOT a transient failure: retrying it will
+     *    fail identically every time, forever. It's thrown as BullMQ's
+     *    `UnrecoverableError`, which tells BullMQ to mark the job failed
+     *    WITHOUT scheduling a retry — discovered by manually testing
+     *    this exact race during development (a manual override landing
+     *    between this worker's two `updateStatus` calls).
+     *  - Any other error (e.g. a transient storage failure) is allowed
+     *    to propagate as-is, so BullMQ's normal retry/backoff applies —
+     *    that failure mode genuinely might succeed on a later attempt.
      */
     async process(job: Job<ProcessPaymentJobData>): Promise<void> {
         const { paymentId } = job.data;
 
         this.logger.log(`Processing job ${job.id} for payment ${paymentId}`);
 
-        await this.paymentsService.updateStatus(paymentId, PaymentStatus.PROCESSING);
+        try {
+            await this.paymentsService.updateStatus(
+                paymentId,
+                PaymentStatus.PROCESSING,
+            );
 
-        const outcome = await this.simulateProcessing(paymentId);
+            const outcome = await this.simulateProcessing(paymentId);
 
-        await this.paymentsService.updateStatus(paymentId, outcome);
+            await this.paymentsService.updateStatus(paymentId, outcome);
+        } catch (error) {
+            if (error instanceof ConflictException) {
+                this.logger.warn(
+                    `Payment ${paymentId} already reached a terminal state before ` +
+                    `job ${job.id} could finish (likely a manual status override) — ` +
+                    `skipping without retry.`,
+                );
+                throw new UnrecoverableError(
+                    `Payment ${paymentId} already in a terminal state`,
+                );
+            }
+            throw error;
+        }
     }
 
     /**
