@@ -52,7 +52,12 @@ async function bootstrap(): Promise<void> {
       'their status, and observe asynchronous processing transitions.',
     )
     .setVersion('1.0')
+    .addApiKey(
+      { type: 'apiKey', name: 'x-api-key', in: 'header' },
+      'api-key',
+    )
     .build();
+
   const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('docs', app, swaggerDocument);
 

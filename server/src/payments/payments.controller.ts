@@ -6,14 +6,24 @@ import {
     ParseUUIDPipe,
     Patch,
     Post,
+    UseGuards,
     UseInterceptors,
 } from '@nestjs/common';
-import { ApiHeader, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+    ApiHeader,
+    ApiOperation,
+    ApiParam,
+    ApiResponse,
+    ApiSecurity,
+    ApiTags,
+} from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { PaymentsService } from './payments.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentStatusDto } from './dto/update-payment-status.dto';
 import { PaymentResponseDto } from './dto/payment-response.dto';
 import { IdempotencyInterceptor } from './idempotency/idempotency.interceptor';
+import { ApiKeyGuard } from '../common/guards/api-key.guard';
 
 /**
  * HTTP layer for payments.
@@ -25,9 +35,18 @@ import { IdempotencyInterceptor } from './idempotency/idempotency.interceptor';
  * queuing) live in the service — if a bug shows up here, it's almost
  * certainly an HTTP wiring issue (status code, param parsing), not a
  * business-logic one.
+ *
+ * `@UseGuards(ApiKeyGuard)` is applied at the CLASS level, so every
+ * route in this controller — create, list, retrieve, and update —
+ * requires a valid `x-api-key` header. The health check endpoint
+ * (`HealthController`) deliberately does NOT have this guard, since
+ * uptime monitors and load balancers typically need to reach a
+ * liveness check without a credential.
  */
 @ApiTags('payments')
+@ApiSecurity('api-key')
 @Controller('payments')
+@UseGuards(ApiKeyGuard)
 export class PaymentsController {
     constructor(private readonly paymentsService: PaymentsService) { }
 
@@ -45,9 +64,16 @@ export class PaymentsController {
      * is rejected with 400 before this method ever runs. This guarantees
      * every payment created through this endpoint is deduplicated
      * against accidental retries, with no opt-out gap.
+     *
+     * `@Throttle` overrides the global rate limit with a STRICTER one
+     * specifically for payment creation — the operation with the most
+     * real abuse/resource-exhaustion potential — while `GET`/`PATCH`
+     * below stay under the more generous global default (see
+     * `AppModule`'s `ThrottlerModule` configuration for the reasoning).
      */
     @Post()
     @UseInterceptors(IdempotencyInterceptor)
+    @Throttle({ default: { limit: 30, ttl: 60_000 } })
     @ApiHeader({
         name: 'Idempotency-Key',
         description:
@@ -63,7 +89,8 @@ export class PaymentsController {
             'Creates a payment in PENDING status and enqueues it for ' +
             'asynchronous processing. The response returns immediately — ' +
             'poll GET /payments/:id to observe the status change to ' +
-            'PROCESSING and then COMPLETED or FAILED.',
+            'PROCESSING and then COMPLETED or FAILED. Rate-limited to 30 ' +
+            'requests per minute per client, stricter than other endpoints.',
     })
     @ApiResponse({
         status: 201,
@@ -71,6 +98,8 @@ export class PaymentsController {
         type: PaymentResponseDto,
     })
     @ApiResponse({ status: 400, description: 'Invalid request body, or missing Idempotency-Key header.' })
+    @ApiResponse({ status: 401, description: 'Missing or invalid API key.' })
+    @ApiResponse({ status: 429, description: 'Rate limit exceeded.' })
     async create(@Body() dto: CreatePaymentDto): Promise<PaymentResponseDto> {
         const payment = await this.paymentsService.createPayment(dto);
         return PaymentResponseDto.fromEntity(payment);
@@ -89,6 +118,7 @@ export class PaymentsController {
         description: 'All stored payments.',
         type: [PaymentResponseDto],
     })
+    @ApiResponse({ status: 401, description: 'Missing or invalid API key.' })
     async findAll(): Promise<PaymentResponseDto[]> {
         const payments = await this.paymentsService.getAllPayments();
         return payments.map((payment) => PaymentResponseDto.fromEntity(payment));
@@ -112,6 +142,7 @@ export class PaymentsController {
         type: PaymentResponseDto,
     })
     @ApiResponse({ status: 400, description: 'Malformed payment ID.' })
+    @ApiResponse({ status: 401, description: 'Missing or invalid API key.' })
     @ApiResponse({ status: 404, description: 'Payment not found.' })
     async findOne(
         @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
@@ -149,6 +180,7 @@ export class PaymentsController {
         type: PaymentResponseDto,
     })
     @ApiResponse({ status: 400, description: 'Invalid request body or ID.' })
+    @ApiResponse({ status: 401, description: 'Missing or invalid API key.' })
     @ApiResponse({ status: 404, description: 'Payment not found.' })
     @ApiResponse({
         status: 409,
