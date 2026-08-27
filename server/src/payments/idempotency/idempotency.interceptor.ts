@@ -1,5 +1,6 @@
 import {
     CallHandler,
+    BadRequestException,
     ExecutionContext,
     HttpStatus,
     Injectable,
@@ -51,8 +52,11 @@ export class IdempotencyInterceptor implements NestInterceptor {
         const idempotencyKey = request.header(IDEMPOTENCY_KEY_HEADER);
 
         if (!idempotencyKey) {
-            return next.handle();
+            throw new BadRequestException(
+                `The "${IDEMPOTENCY_KEY_HEADER}" header is required on this request.`,
+            );
         }
+
 
         const cacheKey = `${request.method}:${request.originalUrl}:${idempotencyKey}`;
         const existing = this.store.get(cacheKey);

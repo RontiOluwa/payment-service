@@ -40,20 +40,22 @@ export class PaymentsController {
      * the payment's initial PENDING state; the queue-driven processing
      * that follows happens after this method has already returned.
      *
-     * `IdempotencyInterceptor` wraps this handler: an optional
-     * `Idempotency-Key` header lets a client safely retry this exact
-     * request (e.g. after a network timeout) without risking a second
-     * payment being created for what was really one intent.
+     * `IdempotencyInterceptor` wraps this handler and REQUIRES an
+     * `Idempotency-Key` header on every request — a request without one
+     * is rejected with 400 before this method ever runs. This guarantees
+     * every payment created through this endpoint is deduplicated
+     * against accidental retries, with no opt-out gap.
      */
     @Post()
     @UseInterceptors(IdempotencyInterceptor)
     @ApiHeader({
         name: 'Idempotency-Key',
         description:
-            'Optional. A client-generated unique value (e.g. a UUID). ' +
+            'Required. A client-generated unique value (e.g. a UUID). ' +
             'Retrying a POST with the same key returns the original payment ' +
-            'instead of creating a duplicate.',
-        required: false,
+            'instead of creating a duplicate. Requests without this header ' +
+            'are rejected with 400.',
+        required: true,
     })
     @ApiOperation({
         summary: 'Create a new payment',
@@ -68,7 +70,7 @@ export class PaymentsController {
         description: 'Payment created successfully.',
         type: PaymentResponseDto,
     })
-    @ApiResponse({ status: 400, description: 'Invalid request body.' })
+    @ApiResponse({ status: 400, description: 'Invalid request body, or missing Idempotency-Key header.' })
     async create(@Body() dto: CreatePaymentDto): Promise<PaymentResponseDto> {
         const payment = await this.paymentsService.createPayment(dto);
         return PaymentResponseDto.fromEntity(payment);

@@ -1,4 +1,4 @@
-import { CallHandler, ExecutionContext, HttpStatus } from '@nestjs/common';
+import { BadRequestException, CallHandler, ExecutionContext, HttpStatus } from '@nestjs/common';
 import { firstValueFrom, Observable, of } from 'rxjs';
 import { IdempotencyInterceptor } from './idempotency.interceptor';
 import { IdempotencyStore } from './idempotency-store';
@@ -68,16 +68,17 @@ describe('IdempotencyInterceptor', () => {
         mockResponse = { status: jest.fn() };
     });
 
-    it('passes the request through untouched when no Idempotency-Key header is present', async () => {
+    it('rejects the request with 400 when no Idempotency-Key header is present', () => {
         const context = buildContext(undefined);
         const handler = buildHandler({ id: 'payment-1' });
         const handleSpy = jest.spyOn(handler, 'handle');
 
-        const result = await firstValueFrom(interceptor.intercept(context, handler));
-
-        expect(handleSpy).toHaveBeenCalledTimes(1);
-        expect(result).toEqual({ id: 'payment-1' });
-        expect(mockResponse.status).not.toHaveBeenCalled();
+        expect(() => interceptor.intercept(context, handler)).toThrow(
+            BadRequestException,
+        );
+        // The handler must never run if the required header is missing —
+        // no payment should ever be created without idempotency protection.
+        expect(handleSpy).not.toHaveBeenCalled();
     });
 
     it('runs the handler normally on the first request with a given key', async () => {
