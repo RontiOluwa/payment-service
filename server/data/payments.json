@@ -1,1 +1,19 @@
-[]
+[
+  {
+    "id": "39c9a14a-caf4-4da3-b34b-4c42aa2dfa16",
+    "amount": 300,
+    "currency": "NGN",
+    "description": "Payment for food",
+    "status": "FAILED",
+    "createdAt": "2026-08-27T09:47:51.018Z",
+    "updatedAt": "2026-08-27T09:47:53.180Z"
+  },
+  {
+    "id": "4b31f1aa-dcda-4fd5-8cdf-0cd576576ca5",
+    "amount": 5000,
+    "currency": "NGN",
+    "status": "COMPLETED",
+    "createdAt": "2026-08-27T09:48:22.636Z",
+    "updatedAt": "2026-08-27T09:48:24.625Z"
+  }
+]

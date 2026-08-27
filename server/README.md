@@ -61,9 +61,9 @@ npm run start:prod
 
 Once running:
 
-- API base URL: `http://localhost:3000`
-- Interactive API docs (Swagger UI): `http://localhost:3000/docs`
-- Liveness check: `GET http://localhost:3000/health` (no auth required)
+- API base URL: `http://localhost:1000`
+- Interactive API docs (Swagger UI): `http://localhost:1000/docs`
+- Liveness check: `GET http://localhost:1000/health` (no auth required)
 
 ## Authentication
 
@@ -112,7 +112,7 @@ quick reference.
 ### Creating a payment
 
 ```bash
-curl -X POST http://localhost:3000/payments \
+curl -X POST http://localhost:1000/payments \
   -H "Content-Type: application/json" \
   -H "x-api-key: dev-local-api-key" \
   -H "Idempotency-Key: <any-unique-client-generated-value>" \
@@ -154,7 +154,7 @@ consistent shape:
 
 ## Testing via Swagger
 
-1. Go to `http://localhost:3000/docs`
+1. Go to `http://localhost:1000/docs`
 2. Click **Authorize**, paste your API key (`dev-local-api-key` if unset),
    click **Authorize**, then **Close** — every request from here on
    automatically includes the header.
@@ -194,7 +194,7 @@ run:
   app instance — since that job references a payment ID that only exists in
   the test's temp data file, the job fails immediately, and the test hangs
   waiting for a job that was never actually processed by its own worker.
-  Confirm nothing else is running (`lsof -i :3000` should return nothing)
+  Confirm nothing else is running (`lsof -i :1000` should return nothing)
   before running `npm run test:e2e`.
 - Each e2e file fully wipes its BullMQ queue in `beforeAll`/`afterAll`, so
   leftover jobs from a previous run (or manual `curl` testing) never
@@ -209,7 +209,7 @@ See `.env.example` for the full list with defaults. The most relevant:
 
 | Variable             | Default                | Description                                             |
 | -------------------- | ---------------------- | ------------------------------------------------------- |
-| `PORT`               | `3000`                 | HTTP port the API listens on                            |
+| `PORT`               | `1000`                 | HTTP port the API listens on                            |
 | `PAYMENTS_DATA_FILE` | `./data/payments.json` | Path to the JSON persistence file                       |
 | `REDIS_HOST`         | `localhost`            | Redis host (queue + idempotency store)                  |
 | `REDIS_PORT`         | `6379`                 | Redis port                                              |
