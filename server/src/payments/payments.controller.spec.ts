@@ -15,13 +15,14 @@ import { IdempotencyInterceptor } from './idempotency/idempotency.interceptor';
  * Business logic (the state machine, queuing) is already covered by
  * `PaymentsService`'s own tests and is not re-tested here.
  *
- * `IdempotencyStore` and `IdempotencyInterceptor` are registered as
- * real (not mocked) providers — the `create` route is decorated with
- * `@UseInterceptors(IdempotencyInterceptor)`, so Nest's DI container
- * needs to be able to construct it even though these tests call
- * `controller.create()` directly and don't go through the interceptor
- * chain at all. `IdempotencyInterceptor` itself has its own dedicated
- * test file covering its actual behavior.
+ * `IdempotencyStore` is also mocked — the `create` route is decorated
+ * with `@UseInterceptors(IdempotencyInterceptor)`, so Nest's DI
+ * container needs `IdempotencyInterceptor`'s dependency satisfied even
+ * though these tests call `controller.create()` directly and never go
+ * through the interceptor chain. A mock avoids needing a real Redis
+ * connection just to compile this test module.
+ * `IdempotencyInterceptor` and `IdempotencyStore` each have their own
+ * dedicated test files covering their actual behavior.
  */
 describe('PaymentsController', () => {
     let controller: PaymentsController;
@@ -54,7 +55,10 @@ describe('PaymentsController', () => {
             controllers: [PaymentsController],
             providers: [
                 { provide: PaymentsService, useValue: mockService },
-                IdempotencyStore,
+                {
+                    provide: IdempotencyStore,
+                    useValue: { tryClaim: jest.fn(), lookup: jest.fn(), complete: jest.fn(), release: jest.fn() },
+                },
                 IdempotencyInterceptor,
             ],
         }).compile();

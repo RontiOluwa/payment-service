@@ -8,6 +8,7 @@ import { PaymentProcessingProcessor } from './processing/payment-processing.proc
 import { PAYMENT_PROCESSING_QUEUE } from './processing/payment-processing.queue';
 import { IdempotencyStore } from './idempotency/idempotency-store';
 import { IdempotencyInterceptor } from './idempotency/idempotency.interceptor';
+import { RedisModule } from '../common/redis/redis.module';
 
 /**
  * Feature module for everything payment-related.
@@ -40,12 +41,17 @@ import { IdempotencyInterceptor } from './idempotency/idempotency.interceptor';
  * providers so Nest's DI container can construct
  * `IdempotencyInterceptor` when `PaymentsController` references it
  * via `@UseInterceptors(IdempotencyInterceptor)` on the create route.
+ * `IdempotencyStore` is backed by Redis (via `RedisModule`, imported
+ * above) rather than an in-memory `Map`, so idempotency guarantees
+ * survive a process restart and work correctly across multiple
+ * instances of this API.
  */
 @Module({
     imports: [
         BullModule.registerQueue({
             name: PAYMENT_PROCESSING_QUEUE,
         }),
+        RedisModule,
     ],
     providers: [
         {

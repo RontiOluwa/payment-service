@@ -1,20 +1,29 @@
-import { BadRequestException, CallHandler, ExecutionContext, HttpStatus } from '@nestjs/common';
+import {
+    BadRequestException,
+    CallHandler,
+    ExecutionContext,
+    HttpStatus,
+    RequestTimeoutException,
+} from '@nestjs/common';
 import { firstValueFrom, Observable, of } from 'rxjs';
 import { IdempotencyInterceptor } from './idempotency.interceptor';
-import { IdempotencyStore } from './idempotency-store';
+import { IdempotencyStore, IdempotencyLookup } from './idempotency-store';
 
 /**
  * Unit tests for `IdempotencyInterceptor`.
  *
- * `ExecutionContext` and `CallHandler` are mocked with just enough
- * shape to satisfy what the interceptor actually calls. A real
- * `IdempotencyStore` instance is used (not mocked) since the store's
- * own `Map` behavior is exactly what makes the concurrency test below
- * meaningful — mocking it away would test nothing real.
+ * `IdempotencyStore` is mocked here (its own Redis-backed behavior is
+ * covered by `idempotency-store.spec.ts`) so these tests focus purely
+ * on the interceptor's claim/poll orchestration logic.
  */
 describe('IdempotencyInterceptor', () => {
     let interceptor: IdempotencyInterceptor;
-    let store: IdempotencyStore;
+    let mockStore: {
+        tryClaim: jest.Mock;
+        lookup: jest.Mock;
+        complete: jest.Mock;
+        release: jest.Mock;
+    };
     let mockResponse: { status: jest.Mock };
 
     const buildContext = (headerValue: string | undefined): ExecutionContext => {
@@ -33,28 +42,10 @@ describe('IdempotencyInterceptor', () => {
         } as unknown as ExecutionContext;
     };
 
-    /** A handler that emits `result` immediately. */
     const buildHandler = (result: unknown): CallHandler => ({
         handle: () => of(result),
     });
 
-    /** A handler that emits `result` after `delayMs`, and reports how many times it actually ran. */
-    const buildDelayedHandler = (
-        result: unknown,
-        delayMs: number,
-        onInvoke: () => void,
-    ): CallHandler => ({
-        handle: () =>
-            new Observable((subscriber) => {
-                onInvoke();
-                setTimeout(() => {
-                    subscriber.next(result);
-                    subscriber.complete();
-                }, delayMs);
-            }),
-    });
-
-    /** A handler that always fails. */
     const buildFailingHandler = (error: Error): CallHandler => ({
         handle: () =>
             new Observable((subscriber) => {
@@ -63,8 +54,13 @@ describe('IdempotencyInterceptor', () => {
     });
 
     beforeEach(() => {
-        store = new IdempotencyStore();
-        interceptor = new IdempotencyInterceptor(store);
+        mockStore = {
+            tryClaim: jest.fn(),
+            lookup: jest.fn(),
+            complete: jest.fn(),
+            release: jest.fn(),
+        };
+        interceptor = new IdempotencyInterceptor(mockStore as unknown as IdempotencyStore);
         mockResponse = { status: jest.fn() };
     });
 
@@ -76,84 +72,90 @@ describe('IdempotencyInterceptor', () => {
         expect(() => interceptor.intercept(context, handler)).toThrow(
             BadRequestException,
         );
-        // The handler must never run if the required header is missing —
-        // no payment should ever be created without idempotency protection.
         expect(handleSpy).not.toHaveBeenCalled();
     });
 
-    it('runs the handler normally on the first request with a given key', async () => {
+    it('runs the handler and records the result when the claim succeeds', async () => {
+        mockStore.tryClaim.mockResolvedValue(true);
         const context = buildContext('key-abc');
         const handler = buildHandler({ id: 'payment-1' });
 
         const result = await firstValueFrom(interceptor.intercept(context, handler));
 
         expect(result).toEqual({ id: 'payment-1' });
+        expect(mockStore.complete).toHaveBeenCalledWith(
+            expect.stringContaining('key-abc'),
+            { id: 'payment-1' },
+        );
+        // A freshly-claimed, successful request never needs to poll.
+        expect(mockStore.lookup).not.toHaveBeenCalled();
     });
 
-    it('returns the original response (without re-running the handler) for a repeated key', async () => {
+    it('releases the claim and rethrows when the handler fails', async () => {
+        mockStore.tryClaim.mockResolvedValue(true);
         const context = buildContext('key-abc');
-        const firstHandler = buildHandler({ id: 'payment-1' });
+        const handler = buildFailingHandler(new Error('boom'));
 
-        await firstValueFrom(interceptor.intercept(context, firstHandler));
+        await expect(
+            firstValueFrom(interceptor.intercept(context, handler)),
+        ).rejects.toThrow('boom');
 
-        const secondHandler = buildHandler({ id: 'DIFFERENT-should-not-see-this' });
-        const secondHandleSpy = jest.spyOn(secondHandler, 'handle');
-
-        const secondResult = await firstValueFrom(
-            interceptor.intercept(context, secondHandler),
+        expect(mockStore.release).toHaveBeenCalledWith(
+            expect.stringContaining('key-abc'),
         );
+        expect(mockStore.complete).not.toHaveBeenCalled();
+    });
 
-        // The second handler must never actually run.
-        expect(secondHandleSpy).not.toHaveBeenCalled();
-        // The client gets back the ORIGINAL result, not a new one.
-        expect(secondResult).toEqual({ id: 'payment-1' });
-        // The cache-hit path explicitly sets the known success status.
+    it('returns the cached result immediately when the key is already completed (retry after success)', async () => {
+        mockStore.tryClaim.mockResolvedValue(false);
+        mockStore.lookup.mockResolvedValue({
+            state: 'completed',
+            value: { id: 'payment-1' },
+        } satisfies IdempotencyLookup);
+
+        const context = buildContext('key-abc');
+        const handler = buildHandler({ id: 'DIFFERENT-should-not-see-this' });
+        const handleSpy = jest.spyOn(handler, 'handle');
+
+        const result = await firstValueFrom(interceptor.intercept(context, handler));
+
+        expect(handleSpy).not.toHaveBeenCalled();
+        expect(result).toEqual({ id: 'payment-1' });
         expect(mockResponse.status).toHaveBeenCalledWith(HttpStatus.CREATED);
     });
 
-    it('does not create a duplicate when two identical requests race concurrently', async () => {
+    it('polls until a concurrent duplicate finishes, then returns its result', async () => {
+        mockStore.tryClaim.mockResolvedValue(false);
+        // Pending on the first two lookups, completed on the third —
+        // simulates a concurrent duplicate still being processed.
+        mockStore.lookup
+            .mockResolvedValueOnce({ state: 'pending' })
+            .mockResolvedValueOnce({ state: 'pending' })
+            .mockResolvedValueOnce({
+                state: 'completed',
+                value: { id: 'payment-once-only' },
+            });
+
         const context = buildContext('key-concurrent');
-        let handlerInvocations = 0;
-        const slowHandler = buildDelayedHandler(
-            { id: 'payment-once-only' },
-            20,
-            () => {
-                handlerInvocations += 1;
-            },
-        );
+        const handler = buildHandler({ id: 'should-not-run' });
+        const handleSpy = jest.spyOn(handler, 'handle');
 
-        // Fire two "requests" with the same key at effectively the same
-        // time — before either has had a chance to finish.
-        const [resultA, resultB] = await Promise.all([
-            firstValueFrom(interceptor.intercept(context, slowHandler)),
-            firstValueFrom(interceptor.intercept(context, slowHandler)),
-        ]);
+        const result = await firstValueFrom(interceptor.intercept(context, handler));
 
-        // The handler's underlying logic only actually ran once — the
-        // second call found the in-flight promise already in the store
-        // and awaited it, rather than invoking the handler a second time.
-        expect(handlerInvocations).toBe(1);
-        expect(resultA).toEqual({ id: 'payment-once-only' });
-        expect(resultB).toEqual({ id: 'payment-once-only' });
+        expect(handleSpy).not.toHaveBeenCalled();
+        expect(mockStore.lookup).toHaveBeenCalledTimes(3);
+        expect(result).toEqual({ id: 'payment-once-only' });
     });
 
-    it('removes the cache entry if the handler fails, allowing a genuine retry', async () => {
-        const context = buildContext('key-failure');
-        const failingHandler = buildFailingHandler(new Error('downstream failure'));
+    it('throws RequestTimeoutException if the claim disappears while polling (owner crashed)', async () => {
+        mockStore.tryClaim.mockResolvedValue(false);
+        mockStore.lookup.mockResolvedValue({ state: 'not-found' });
+
+        const context = buildContext('key-crashed');
+        const handler = buildHandler({ id: 'irrelevant' });
 
         await expect(
-            firstValueFrom(interceptor.intercept(context, failingHandler)),
-        ).rejects.toThrow('downstream failure');
-
-        // Give the store's cleanup .catch() a microtask to run before the
-        // next request checks the store.
-        await new Promise((resolve) => setImmediate(resolve));
-
-        const succeedingHandler = buildHandler({ id: 'payment-retry-succeeded' });
-        const result = await firstValueFrom(
-            interceptor.intercept(context, succeedingHandler),
-        );
-
-        expect(result).toEqual({ id: 'payment-retry-succeeded' });
+            firstValueFrom(interceptor.intercept(context, handler)),
+        ).rejects.toThrow(RequestTimeoutException);
     });
 });
