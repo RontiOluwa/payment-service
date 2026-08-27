@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { PaymentsModule } from './payments/payments.module';
+import { HealthController } from './health/health.controller';
 
 /**
  * Root application module.
@@ -28,5 +29,6 @@ import { PaymentsModule } from './payments/payments.module';
     }),
     PaymentsModule,
   ],
+  controllers: [HealthController],
 })
 export class AppModule { }

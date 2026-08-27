@@ -1,8 +1,28 @@
-import { Module } from '@nestjs/common';
+import { Inject, Injectable, Module, OnModuleDestroy } from '@nestjs/common';
 import Redis from 'ioredis';
 
 /** DI token for the shared, general-purpose Redis client. */
 export const REDIS_CLIENT = 'REDIS_CLIENT';
+
+/**
+ * Closes the shared Redis connection when the Nest application shuts
+ * down (including in tests, when `app.close()` is called).
+ *
+ * Without this, the connection this module opens stays alive after
+ * the app itself has stopped — harmless in the running app (the
+ * process just keeps running), but it leaves an open handle behind in
+ * tests, which is exactly what surfaced this gap: Jest warned about a
+ * dangling connection after the e2e suite finished, even though every
+ * test itself had passed.
+ */
+@Injectable()
+class RedisShutdownHook implements OnModuleDestroy {
+    constructor(@Inject(REDIS_CLIENT) private readonly client: Redis) { }
+
+    async onModuleDestroy(): Promise<void> {
+        await this.client.quit();
+    }
+}
 
 /**
  * Provides a general-purpose Redis client, separate from the
@@ -25,6 +45,7 @@ export const REDIS_CLIENT = 'REDIS_CLIENT';
                     port: Number(process.env.REDIS_PORT ?? 6379),
                 }),
         },
+        RedisShutdownHook,
     ],
     exports: [REDIS_CLIENT],
 })

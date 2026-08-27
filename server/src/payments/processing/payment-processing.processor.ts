@@ -21,6 +21,21 @@ const MAX_DELAY_MS = 3_000;
 const SUCCESS_PROBABILITY = 0.8;
 
 /**
+ * Number of jobs this worker processes concurrently. Left at BullMQ's
+ * default (1), payments would be processed strictly one at a time,
+ * however many are created simultaneously — a real throughput
+ * limitation for a payment service, not just a theoretical one. This
+ * was actually discovered via the e2e integration test suite: with
+ * only one payment queued, processing finished in ~2s; with several
+ * payments created in quick succession by earlier tests in the same
+ * run, a job could sit behind others long enough to exceed a
+ * reasonable wait window. 5 is a modest, deliberately conservative
+ * default for this project's scope — easily made configurable via an
+ * environment variable if this were tuned for real production load.
+ */
+const WORKER_CONCURRENCY = 5;
+
+/**
  * BullMQ worker that simulates an external payment gateway's
  * asynchronous processing.
  *
@@ -49,7 +64,7 @@ const SUCCESS_PROBABILITY = 0.8;
  * reasonable stand-in that still forces the rest of the system (state
  * machine, client polling) to handle genuine asynchronous behavior.
  */
-@Processor(PAYMENT_PROCESSING_QUEUE)
+@Processor(PAYMENT_PROCESSING_QUEUE, { concurrency: WORKER_CONCURRENCY })
 export class PaymentProcessingProcessor extends WorkerHost {
     private readonly logger = new Logger(PaymentProcessingProcessor.name);
 
