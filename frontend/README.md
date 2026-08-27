@@ -25,7 +25,7 @@ cp .env.local.example .env.local
 Edit `.env.local` if your backend isn't running on the defaults:
 
 ```bash
-NEXT_PUBLIC_API_URL=http://localhost:3000
+NEXT_PUBLIC_API_URL=http://localhost:1000
 NEXT_PUBLIC_API_KEY=dev-local-api-key
 ```
 

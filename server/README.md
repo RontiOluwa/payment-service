@@ -53,17 +53,19 @@ npm run start:worker:dev
 If you only start the API, `POST /payments` will still succeed and payments will be created — they will simply sit at `PENDING` forever, since nothing is consuming the queue. This is expected, correct behavior for a real service split, not a bug.
 
 Production equivalents (after `npm run build`):
+
 ```bash
 npm run start:prod         # API
 npm run start:worker:prod  # worker
 ```
 
 Once the API is running:
-- API base URL: `http://localhost:3000`
-- Interactive API docs (Swagger UI): `http://localhost:3000/docs`
-- Liveness check: `GET http://localhost:3000/health` (no auth required)
 
-**Port conflict note:** if you're also running the [demo frontend](../payment-service-ui), it defaults to port 3000 too — run one of them on a different port.
+- API base URL: `http://localhost:1000`
+- Interactive API docs (Swagger UI): `http://localhost:1000/docs`
+- Liveness check: `GET http://localhost:1000/health` (no auth required)
+
+**Port conflict note:** if you're also running the [demo frontend](../payment-service-ui), it defaults to port 1000 too — run one of them on a different port.
 
 ## Authentication
 
@@ -87,18 +89,18 @@ Exceeding a limit returns `429 Too Many Requests`.
 
 Full interactive documentation (with example requests/responses, and an "Authorize" button for the API key) is at `/docs` once the API is running.
 
-| Method | Endpoint | Auth required | Description |
-|---|---|---|---|
-| `POST` | `/payments` | Yes | Create a payment. **Requires** an `Idempotency-Key` header too. Rate-limited to 30/min. |
-| `GET` | `/payments` | Yes | List all payments. |
-| `GET` | `/payments/:id` | Yes | Retrieve a single payment by ID. |
-| `PATCH` | `/payments/:id/status` | Yes | Manually update a payment's status. |
-| `GET` | `/health` | No | Liveness check. |
+| Method  | Endpoint               | Auth required | Description                                                                             |
+| ------- | ---------------------- | ------------- | --------------------------------------------------------------------------------------- |
+| `POST`  | `/payments`            | Yes           | Create a payment. **Requires** an `Idempotency-Key` header too. Rate-limited to 30/min. |
+| `GET`   | `/payments`            | Yes           | List all payments.                                                                      |
+| `GET`   | `/payments/:id`        | Yes           | Retrieve a single payment by ID.                                                        |
+| `PATCH` | `/payments/:id/status` | Yes           | Manually update a payment's status.                                                     |
+| `GET`   | `/health`              | No            | Liveness check.                                                                         |
 
 ### Creating a payment
 
 ```bash
-curl -X POST http://localhost:3000/payments \
+curl -X POST http://localhost:1000/payments \
   -H "Content-Type: application/json" \
   -H "x-api-key: dev-local-api-key" \
   -H "Idempotency-Key: <any-unique-client-generated-value>" \
@@ -149,24 +151,25 @@ npm run test:cov
 ```
 
 Two e2e spec files, both required for `npm run test:e2e`:
+
 - `test/payments.e2e-spec.ts` — the main functional suite. Bootstraps BOTH the API module and the worker module internally (since the split means the API alone has no consumer), so this test is self-contained and doesn't depend on a separately-running worker process.
 - `test/rate-limiting.e2e-spec.ts` — an isolated stress test proving the rate limits are enforced.
 
 `test/jest-e2e.json` sets `maxWorkers: 1` so these two files run one at a time (they share one real Redis queue). Each file wipes its BullMQ queue in `beforeAll`/`afterAll`, so leftover jobs from a previous run never interfere.
 
-**If running `npm run start:dev` in a separate terminal while also running e2e tests**, stop it first — a second live worker connected to the same Redis can claim a job meant for the test's own isolated worker context, and since that job references a payment ID that only exists in the test's temp data file, it will fail. Confirm nothing else is running (`lsof -i :3000` should return nothing) before `npm run test:e2e`.
+**If running `npm run start:dev` in a separate terminal while also running e2e tests**, stop it first — a second live worker connected to the same Redis can claim a job meant for the test's own isolated worker context, and since that job references a payment ID that only exists in the test's temp data file, it will fail. Confirm nothing else is running (`lsof -i :1000` should return nothing) before `npm run test:e2e`.
 
 ## Environment Variables
 
 See `.env.example` for the full list. The most relevant:
 
-| Variable | Default | Description |
-|---|---|---|
-| `PORT` | `3000` | HTTP port the API listens on |
+| Variable             | Default                | Description                                                                                          |
+| -------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------- |
+| `PORT`               | `1000`                 | HTTP port the API listens on                                                                         |
 | `PAYMENTS_DATA_FILE` | `./data/payments.json` | Path to the JSON persistence file — **must be the same value for both the API and worker processes** |
-| `REDIS_HOST` | `localhost` | Redis host — used for the queue, idempotency store, AND the cross-process file lock |
-| `REDIS_PORT` | `6379` | Redis port |
-| `API_KEY` | `dev-local-api-key` | Shared-secret key required on every `/payments` request |
+| `REDIS_HOST`         | `localhost`            | Redis host — used for the queue, idempotency store, AND the cross-process file lock                  |
+| `REDIS_PORT`         | `6379`                 | Redis port                                                                                           |
+| `API_KEY`            | `dev-local-api-key`    | Shared-secret key required on every `/payments` request                                              |
 
 ## Project Structure
 
