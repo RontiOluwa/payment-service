@@ -2,21 +2,28 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { BullModule } from '@nestjs/bullmq';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
-import { PaymentsModule } from './payments/payments.module';
+import { PaymentsApiModule } from './payments/api/payments-api.module';
 import { HealthController } from './health/health.controller';
 
 /**
- * Root application module.
+ * Root module for the API PROCESS (bootstrapped by `src/main.ts`).
+ *
+ * This is one of TWO independently deployable processes in this
+ * project — the other is the worker process, bootstrapped by
+ * `src/worker.ts` with its own root module (`WorkerAppModule`). They
+ * are genuinely separate: this process never instantiates
+ * `PaymentProcessingProcessor` at all. If you run only this process
+ * without ever starting the worker, payments will be created and
+ * enqueued but never processed — status will sit at PENDING forever.
+ * That's not a bug; it's the observable behavior of a real service
+ * split, not just internally-organized classes in one process.
  *
  * `BullModule.forRoot()` establishes the shared Redis connection used
- * by every BullMQ queue in the app. It's registered here (not inside
- * `PaymentsModule`) because the Redis connection is process-wide
- * infrastructure — any future module adding its own queue would reuse
- * this same connection rather than opening a new one.
- *
- * Connection details come from environment variables (see
- * `.env.example`), defaulting to a local Redis instance on the
- * standard port — matching what `docker-compose.yml` provides.
+ * by the queue. Both this process and the worker process register the
+ * SAME queue name against the SAME Redis connection — this process
+ * only ever PRODUCES jobs (via `PaymentsService`'s injected `Queue`,
+ * available through `PaymentsApiModule` -> `PaymentsCoreModule`); it
+ * never consumes any.
  *
  * `ThrottlerModule.forRoot()` configures a GLOBAL default rate limit
  * (100 requests/minute per client), applied to every route via the
@@ -34,9 +41,7 @@ import { HealthController } from './health/health.controller';
  * module) since it's a single trivial controller with no providers of
  * its own — creating a whole module for it would be unnecessary
  * ceremony. Its `check()` method is marked `@SkipThrottle()` so uptime
- * monitors/load balancers can always reach it. Feature modules with
- * real logic (like `PaymentsModule`) still get their own module and
- * are imported below.
+ * monitors/load balancers can always reach it.
  */
 @Module({
   imports: [
@@ -53,7 +58,7 @@ import { HealthController } from './health/health.controller';
         port: Number(process.env.REDIS_PORT ?? 6379),
       },
     }),
-    PaymentsModule,
+    PaymentsApiModule,
   ],
   controllers: [HealthController],
   providers: [
@@ -63,4 +68,4 @@ import { HealthController } from './health/health.controller';
     },
   ],
 })
-export class AppModule { }
+export class AppModule {}

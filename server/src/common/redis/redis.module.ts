@@ -17,11 +17,11 @@ export const REDIS_CLIENT = 'REDIS_CLIENT';
  */
 @Injectable()
 class RedisShutdownHook implements OnModuleDestroy {
-    constructor(@Inject(REDIS_CLIENT) private readonly client: Redis) { }
+  constructor(@Inject(REDIS_CLIENT) private readonly client: Redis) {}
 
-    async onModuleDestroy(): Promise<void> {
-        await this.client.quit();
-    }
+  async onModuleDestroy(): Promise<void> {
+    await this.client.quit();
+  }
 }
 
 /**
@@ -36,17 +36,17 @@ class RedisShutdownHook implements OnModuleDestroy {
  * reusing the same `REDIS_HOST`/`REDIS_PORT` configuration.
  */
 @Module({
-    providers: [
-        {
-            provide: REDIS_CLIENT,
-            useFactory: () =>
-                new Redis({
-                    host: process.env.REDIS_HOST ?? 'localhost',
-                    port: Number(process.env.REDIS_PORT ?? 6379),
-                }),
-        },
-        RedisShutdownHook,
-    ],
-    exports: [REDIS_CLIENT],
+  providers: [
+    {
+      provide: REDIS_CLIENT,
+      useFactory: () =>
+        new Redis({
+          host: process.env.REDIS_HOST ?? 'localhost',
+          port: Number(process.env.REDIS_PORT ?? 6379),
+        }),
+    },
+    RedisShutdownHook,
+  ],
+  exports: [REDIS_CLIENT],
 })
-export class RedisModule { }
+export class RedisModule {}

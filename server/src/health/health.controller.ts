@@ -26,10 +26,10 @@ import { SkipThrottle } from '@nestjs/throttler';
 @Controller('health')
 @SkipThrottle()
 export class HealthController {
-    @Get()
-    @ApiOperation({ summary: 'Liveness check' })
-    @ApiResponse({ status: 200, description: 'The service is up.' })
-    check(): { status: string; timestamp: string } {
-        return { status: 'ok', timestamp: new Date().toISOString() };
-    }
+  @Get()
+  @ApiOperation({ summary: 'Liveness check' })
+  @ApiResponse({ status: 200, description: 'The service is up.' })
+  check(): { status: string; timestamp: string } {
+    return { status: 'ok', timestamp: new Date().toISOString() };
+  }
 }

@@ -17,5 +17,5 @@ export const PROCESS_PAYMENT_JOB = 'process-payment';
 
 /** Shape of the data carried by a `process-payment` job. */
 export interface ProcessPaymentJobData {
-    paymentId: string;
+  paymentId: string;
 }

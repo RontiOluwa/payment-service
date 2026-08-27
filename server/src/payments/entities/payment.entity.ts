@@ -13,24 +13,25 @@ import { PaymentStatus } from '../enums/payment-status.enum';
  * storage technology.
  */
 export interface Payment {
-    /** Unique identifier for the payment (UUID v4). */
-    id: string;
+  /** Unique identifier for the payment (UUID v4). */
+  id: string;
 
-    /** Payment amount, treated as a plain decimal amount (e.g. 100.50). */
-    amount: number;
+  /** Payment amount, in the smallest currency unit is NOT assumed here —
+   *  this is treated as a plain decimal amount (e.g. 100.50). */
+  amount: number;
 
-    /** ISO 4217 currency code, e.g. "NGN", "USD". */
-    currency: string;
+  /** ISO 4217 currency code, e.g. "NGN", "USD". */
+  currency: string;
 
-    /** Current lifecycle state of the payment. */
-    status: PaymentStatus;
+  /** Current lifecycle state of the payment. */
+  status: PaymentStatus;
 
-    /** Optional free-text description of what the payment is for. */
-    description?: string;
+  /** Optional free-text description of what the payment is for. */
+  description?: string;
 
-    /** Timestamp the payment record was created. */
-    createdAt: Date;
+  /** Timestamp the payment record was created. */
+  createdAt: Date;
 
-    /** Timestamp the payment record was last updated. */
-    updatedAt: Date;
+  /** Timestamp the payment record was last updated. */
+  updatedAt: Date;
 }

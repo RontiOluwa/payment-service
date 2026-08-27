@@ -1,8 +1,8 @@
 import {
-    CanActivate,
-    ExecutionContext,
-    Injectable,
-    UnauthorizedException,
+  CanActivate,
+  ExecutionContext,
+  Injectable,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { Request } from 'express';
 
@@ -41,17 +41,17 @@ const DEFAULT_DEV_API_KEY = 'dev-local-api-key';
  */
 @Injectable()
 export class ApiKeyGuard implements CanActivate {
-    canActivate(context: ExecutionContext): boolean {
-        const request = context.switchToHttp().getRequest<Request>();
-        const providedKey = request.header(API_KEY_HEADER);
-        const expectedKey = process.env.API_KEY ?? DEFAULT_DEV_API_KEY;
+  canActivate(context: ExecutionContext): boolean {
+    const request = context.switchToHttp().getRequest<Request>();
+    const providedKey = request.header(API_KEY_HEADER);
+    const expectedKey = process.env.API_KEY ?? DEFAULT_DEV_API_KEY;
 
-        if (!providedKey || providedKey !== expectedKey) {
-            throw new UnauthorizedException(
-                `A valid "${API_KEY_HEADER}" header is required.`,
-            );
-        }
-
-        return true;
+    if (!providedKey || providedKey !== expectedKey) {
+      throw new UnauthorizedException(
+        `A valid "${API_KEY_HEADER}" header is required.`,
+      );
     }
+
+    return true;
+  }
 }

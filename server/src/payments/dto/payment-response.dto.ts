@@ -12,42 +12,42 @@ import { Payment } from '../entities/payment.entity';
  * references), this response shape doesn't automatically leak them.
  */
 export class PaymentResponseDto {
-    @ApiProperty({ example: '3f1b6c2e-9a3d-4b8e-8f3a-1c2d3e4f5a6b' })
-    id: string;
+  @ApiProperty({ example: '3f1b6c2e-9a3d-4b8e-8f3a-1c2d3e4f5a6b' })
+  id: string;
 
-    @ApiProperty({ example: 5000 })
-    amount: number;
+  @ApiProperty({ example: 5000 })
+  amount: number;
 
-    @ApiProperty({ example: 'NGN' })
-    currency: string;
+  @ApiProperty({ example: 'NGN' })
+  currency: string;
 
-    @ApiProperty({ enum: PaymentStatus, example: PaymentStatus.PENDING })
-    status: PaymentStatus;
+  @ApiProperty({ enum: PaymentStatus, example: PaymentStatus.PENDING })
+  status: PaymentStatus;
 
-    @ApiPropertyOptional({ example: 'Invoice #1024 for cashew export shipment' })
-    description?: string;
+  @ApiPropertyOptional({ example: 'Invoice #1024 for cashew export shipment' })
+  description?: string;
 
-    @ApiProperty({ example: '2026-08-26T17:56:41.000Z' })
-    createdAt: Date;
+  @ApiProperty({ example: '2026-08-26T17:56:41.000Z' })
+  createdAt: Date;
 
-    @ApiProperty({ example: '2026-08-26T17:56:41.000Z' })
-    updatedAt: Date;
+  @ApiProperty({ example: '2026-08-26T17:56:41.000Z' })
+  updatedAt: Date;
 
-    /**
-     * Maps an internal `Payment` domain object to its public response
-     * shape. Centralizing the mapping here means controllers never
-     * construct this shape by hand, so the mapping only needs to be
-     * correct in one place.
-     */
-    static fromEntity(payment: Payment): PaymentResponseDto {
-        const dto = new PaymentResponseDto();
-        dto.id = payment.id;
-        dto.amount = payment.amount;
-        dto.currency = payment.currency;
-        dto.status = payment.status;
-        dto.description = payment.description;
-        dto.createdAt = payment.createdAt;
-        dto.updatedAt = payment.updatedAt;
-        return dto;
-    }
+  /**
+   * Maps an internal `Payment` domain object to its public response
+   * shape. Centralizing the mapping here means controllers never
+   * construct this shape by hand, so the mapping only needs to be
+   * correct in one place.
+   */
+  static fromEntity(payment: Payment): PaymentResponseDto {
+    const dto = new PaymentResponseDto();
+    dto.id = payment.id;
+    dto.amount = payment.amount;
+    dto.currency = payment.currency;
+    dto.status = payment.status;
+    dto.description = payment.description;
+    dto.createdAt = payment.createdAt;
+    dto.updatedAt = payment.updatedAt;
+    return dto;
+  }
 }

@@ -1,27 +1,20 @@
 [
   {
-    "id": "39c9a14a-caf4-4da3-b34b-4c42aa2dfa16",
-    "amount": 300,
-    "currency": "NGN",
-    "description": "Payment for food",
-    "status": "FAILED",
-    "createdAt": "2026-08-27T09:47:51.018Z",
-    "updatedAt": "2026-08-27T09:47:53.180Z"
-  },
-  {
-    "id": "4b31f1aa-dcda-4fd5-8cdf-0cd576576ca5",
+    "id": "6cfbd30f-a1a4-4ce1-ae2a-8a9c4aa5f082",
     "amount": 5000,
     "currency": "NGN",
-    "status": "COMPLETED",
-    "createdAt": "2026-08-27T09:48:22.636Z",
-    "updatedAt": "2026-08-27T09:48:24.625Z"
+    "description": "sample",
+    "status": "FAILED",
+    "createdAt": "2026-08-27T15:29:03.246Z",
+    "updatedAt": "2026-08-27T15:29:05.783Z"
   },
   {
-    "id": "a1afe4be-b3fd-4790-9e3b-8faadee679fa",
-    "amount": 100,
+    "id": "2d4269a1-fce7-4d02-bf65-9083a3004070",
+    "amount": 1000,
     "currency": "NGN",
+    "description": "set",
     "status": "COMPLETED",
-    "createdAt": "2026-08-27T10:07:03.683Z",
-    "updatedAt": "2026-08-27T10:07:05.706Z"
+    "createdAt": "2026-08-27T15:29:21.287Z",
+    "updatedAt": "2026-08-27T15:29:24.067Z"
   }
 ]

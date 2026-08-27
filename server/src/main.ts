@@ -57,7 +57,6 @@ async function bootstrap(): Promise<void> {
       'api-key',
     )
     .build();
-
   const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('docs', app, swaggerDocument);
 

@@ -1,5 +1,8 @@
 # Provides Redis, required for BullMQ-based asynchronous payment
-# processing.
+# processing. This is NOT needed to run the API itself if you switch
+# STORAGE_DRIVER to "memory" and don't need real queue processing —
+# but for the default "file" + queue-based configuration, Redis must
+# be running before `npm run start:dev`.
 #
 # Usage:
 #   docker compose up -d      # start Redis in the background

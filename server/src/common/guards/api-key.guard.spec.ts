@@ -8,63 +8,63 @@ import { ApiKeyGuard } from './api-key.guard';
  * the guard actually calls — `switchToHttp().getRequest()`.
  */
 describe('ApiKeyGuard', () => {
-    let guard: ApiKeyGuard;
-    const originalApiKey = process.env.API_KEY;
+  let guard: ApiKeyGuard;
+  const originalApiKey = process.env.API_KEY;
 
-    const buildContext = (headerValue: string | undefined): ExecutionContext => {
-        const mockRequest = {
-            header: (name: string) =>
-                name.toLowerCase() === 'x-api-key' ? headerValue : undefined,
-        };
-
-        return {
-            switchToHttp: () => ({
-                getRequest: () => mockRequest,
-            }),
-        } as unknown as ExecutionContext;
+  const buildContext = (headerValue: string | undefined): ExecutionContext => {
+    const mockRequest = {
+      header: (name: string) =>
+        name.toLowerCase() === 'x-api-key' ? headerValue : undefined,
     };
 
-    beforeEach(() => {
-        guard = new ApiKeyGuard();
-    });
+    return {
+      switchToHttp: () => ({
+        getRequest: () => mockRequest,
+      }),
+    } as unknown as ExecutionContext;
+  };
 
-    afterEach(() => {
-        process.env.API_KEY = originalApiKey;
-    });
+  beforeEach(() => {
+    guard = new ApiKeyGuard();
+  });
 
-    it('allows the request when the header matches API_KEY', () => {
-        process.env.API_KEY = 'secret-123';
+  afterEach(() => {
+    process.env.API_KEY = originalApiKey;
+  });
 
-        expect(guard.canActivate(buildContext('secret-123'))).toBe(true);
-    });
+  it('allows the request when the header matches API_KEY', () => {
+    process.env.API_KEY = 'secret-123';
 
-    it('rejects the request when the header is missing', () => {
-        process.env.API_KEY = 'secret-123';
+    expect(guard.canActivate(buildContext('secret-123'))).toBe(true);
+  });
 
-        expect(() => guard.canActivate(buildContext(undefined))).toThrow(
-            UnauthorizedException,
-        );
-    });
+  it('rejects the request when the header is missing', () => {
+    process.env.API_KEY = 'secret-123';
 
-    it('rejects the request when the header does not match', () => {
-        process.env.API_KEY = 'secret-123';
+    expect(() => guard.canActivate(buildContext(undefined))).toThrow(
+      UnauthorizedException,
+    );
+  });
 
-        expect(() => guard.canActivate(buildContext('wrong-key'))).toThrow(
-            UnauthorizedException,
-        );
-    });
+  it('rejects the request when the header does not match', () => {
+    process.env.API_KEY = 'secret-123';
 
-    it('falls back to the default dev key when API_KEY is unset', () => {
-        delete process.env.API_KEY;
+    expect(() => guard.canActivate(buildContext('wrong-key'))).toThrow(
+      UnauthorizedException,
+    );
+  });
 
-        expect(guard.canActivate(buildContext('dev-local-api-key'))).toBe(true);
-    });
+  it('falls back to the default dev key when API_KEY is unset', () => {
+    delete process.env.API_KEY;
 
-    it('rejects an empty string header value', () => {
-        process.env.API_KEY = 'secret-123';
+    expect(guard.canActivate(buildContext('dev-local-api-key'))).toBe(true);
+  });
 
-        expect(() => guard.canActivate(buildContext(''))).toThrow(
-            UnauthorizedException,
-        );
-    });
+  it('rejects an empty string header value', () => {
+    process.env.API_KEY = 'secret-123';
+
+    expect(() => guard.canActivate(buildContext(''))).toThrow(
+      UnauthorizedException,
+    );
+  });
 });

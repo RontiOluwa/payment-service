@@ -13,27 +13,26 @@ export const PAYMENT_REPOSITORY = 'PAYMENT_REPOSITORY';
  * Persistence-agnostic contract for storing and retrieving payments.
  *
  * `PaymentsService` depends on this interface only — never on a
- * concrete storage technology. This is what makes the storage layer
- * swappable: `InMemoryPaymentRepository` (this step) and
- * `JsonFilePaymentRepository` (a later step) both implement this same
- * contract, and swapping between them (or later, a real database) is
- * a one-line change in `payments.module.ts`, with zero changes to
- * business logic.
+ * concrete storage technology. `JsonFilePaymentRepository` is the
+ * project's implementation; the abstraction means a different backend
+ * (e.g. a real database) could be swapped in later via a one-line
+ * change in `payments.module.ts`, with zero changes to business
+ * logic.
  */
 export interface PaymentRepository {
-    /** Persist a new payment record. */
-    create(payment: Payment): Promise<Payment>;
+  /** Persist a new payment record. */
+  create(payment: Payment): Promise<Payment>;
 
-    /** Retrieve a payment by its ID, or `null` if it doesn't exist. */
-    findById(id: string): Promise<Payment | null>;
+  /** Retrieve a payment by its ID, or `null` if it doesn't exist. */
+  findById(id: string): Promise<Payment | null>;
 
-    /**
-     * Persist an updated payment record. The caller is responsible for
-     * constructing the full updated `Payment` object (including a fresh
-     * `updatedAt`) — the repository's job is only to store it.
-     */
-    update(payment: Payment): Promise<Payment>;
+  /**
+   * Persist an updated payment record. The caller is responsible for
+   * constructing the full updated `Payment` object (including a fresh
+   * `updatedAt`) — the repository's job is only to store it.
+   */
+  update(payment: Payment): Promise<Payment>;
 
-    /** Retrieve all payments. Used by the optional list endpoint/UI. */
-    findAll(): Promise<Payment[]>;
+  /** Retrieve all payments. Used by the optional list endpoint/UI. */
+  findAll(): Promise<Payment[]>;
 }

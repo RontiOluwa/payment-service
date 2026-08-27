@@ -14,13 +14,13 @@ import { PaymentStatus } from '../enums/payment-status.enum';
  * cleanly separated.
  */
 export class UpdatePaymentStatusDto {
-    @ApiProperty({
-        description: 'The new status to transition the payment to.',
-        enum: PaymentStatus,
-        example: PaymentStatus.FAILED,
-    })
-    @IsEnum(PaymentStatus, {
-        message: `status must be one of: ${Object.values(PaymentStatus).join(', ')}`,
-    })
-    status: PaymentStatus;
+  @ApiProperty({
+    description: 'The new status to transition the payment to.',
+    enum: PaymentStatus,
+    example: PaymentStatus.FAILED,
+  })
+  @IsEnum(PaymentStatus, {
+    message: `status must be one of: ${Object.values(PaymentStatus).join(', ')}`,
+  })
+  status: PaymentStatus;
 }

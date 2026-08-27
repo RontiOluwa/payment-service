@@ -1,10 +1,10 @@
 import {
-    ArgumentsHost,
-    Catch,
-    ExceptionFilter,
-    HttpException,
-    HttpStatus,
-    Logger,
+  ArgumentsHost,
+  Catch,
+  ExceptionFilter,
+  HttpException,
+  HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 
@@ -15,11 +15,11 @@ import { Request, Response } from 'express';
  * looking the same to a client.
  */
 interface ErrorResponseBody {
-    statusCode: number;
-    message: string | string[];
-    error: string;
-    timestamp: string;
-    path: string;
+  statusCode: number;
+  message: string | string[];
+  error: string;
+  timestamp: string;
+  path: string;
 }
 
 /**
@@ -38,80 +38,80 @@ interface ErrorResponseBody {
  */
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
-    private readonly logger = new Logger(AllExceptionsFilter.name);
+  private readonly logger = new Logger(AllExceptionsFilter.name);
 
-    catch(exception: unknown, host: ArgumentsHost): void {
-        const ctx = host.switchToHttp();
-        const response = ctx.getResponse<Response>();
-        const request = ctx.getRequest<Request>();
+  catch(exception: unknown, host: ArgumentsHost): void {
+    const ctx = host.switchToHttp();
+    const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<Request>();
 
-        const { statusCode, message, error } = this.resolveException(exception);
+    const { statusCode, message, error } = this.resolveException(exception);
 
-        // A 5xx represents a genuine bug or unexpected failure — log the
-        // full detail (including stack trace) server-side even though the
-        // client only ever receives the generic message below. Client
-        // errors (4xx) are expected, routine traffic and don't need
-        // error-level log noise for every validation failure or 404.
-        if (statusCode >= HttpStatus.INTERNAL_SERVER_ERROR) {
-            this.logger.error(
-                `Unhandled exception on ${request.method} ${request.url}`,
-                exception instanceof Error ? exception.stack : String(exception),
-            );
-        }
-
-        const body: ErrorResponseBody = {
-            statusCode,
-            message,
-            error,
-            timestamp: new Date().toISOString(),
-            path: request.url,
-        };
-
-        response.status(statusCode).json(body);
+    // A 5xx represents a genuine bug or unexpected failure — log the
+    // full detail (including stack trace) server-side even though the
+    // client only ever receives the generic message below. Client
+    // errors (4xx) are expected, routine traffic and don't need
+    // error-level log noise for every validation failure or 404.
+    if (statusCode >= HttpStatus.INTERNAL_SERVER_ERROR) {
+      this.logger.error(
+        `Unhandled exception on ${request.method} ${request.url}`,
+        exception instanceof Error ? exception.stack : String(exception),
+      );
     }
 
-    /**
-     * Normalizes any thrown value into a consistent
-     * `{ statusCode, message, error }` triple.
-     *
-     * Nest's built-in `HttpException` subclasses (and `ValidationPipe`
-     * failures) already carry a structured response body — that's
-     * reused directly rather than re-derived. Anything that ISN'T an
-     * `HttpException` at all (a genuine bug — a thrown plain object, a
-     * null-pointer-style error, anything unanticipated) is deliberately
-     * NOT passed through to the client: its real message could contain
-     * internal details (file paths, library internals) that shouldn't
-     * be exposed over a public API.
-     */
-    private resolveException(exception: unknown): {
-        statusCode: number;
-        message: string | string[];
-        error: string;
-    } {
-        if (exception instanceof HttpException) {
-            const status = exception.getStatus();
-            const payload = exception.getResponse();
+    const body: ErrorResponseBody = {
+      statusCode,
+      message,
+      error,
+      timestamp: new Date().toISOString(),
+      path: request.url,
+    };
 
-            if (typeof payload === 'object' && payload !== null) {
-                const body = payload as Record<string, unknown>;
-                return {
-                    statusCode: status,
-                    message: (body.message as string | string[]) ?? exception.message,
-                    error: (body.error as string) ?? 'Error',
-                };
-            }
+    response.status(statusCode).json(body);
+  }
 
-            return {
-                statusCode: status,
-                message: typeof payload === 'string' ? payload : exception.message,
-                error: 'Error',
-            };
-        }
+  /**
+   * Normalizes any thrown value into a consistent
+   * `{ statusCode, message, error }` triple.
+   *
+   * Nest's built-in `HttpException` subclasses (and `ValidationPipe`
+   * failures) already carry a structured response body — that's
+   * reused directly rather than re-derived. Anything that ISN'T an
+   * `HttpException` at all (a genuine bug — a thrown plain object, a
+   * null-pointer-style error, anything unanticipated) is deliberately
+   * NOT passed through to the client: its real message could contain
+   * internal details (file paths, library internals) that shouldn't
+   * be exposed over a public API.
+   */
+  private resolveException(exception: unknown): {
+    statusCode: number;
+    message: string | string[];
+    error: string;
+  } {
+    if (exception instanceof HttpException) {
+      const status = exception.getStatus();
+      const payload = exception.getResponse();
 
+      if (typeof payload === 'object' && payload !== null) {
+        const body = payload as Record<string, unknown>;
         return {
-            statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-            message: 'An unexpected error occurred.',
-            error: 'Internal Server Error',
+          statusCode: status,
+          message: (body.message as string | string[]) ?? exception.message,
+          error: (body.error as string) ?? 'Error',
         };
+      }
+
+      return {
+        statusCode: status,
+        message: typeof payload === 'string' ? payload : exception.message,
+        error: 'Error',
+      };
     }
+
+    return {
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      message: 'An unexpected error occurred.',
+      error: 'Internal Server Error',
+    };
+  }
 }
