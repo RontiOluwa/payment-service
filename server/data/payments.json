@@ -15,5 +15,13 @@
     "status": "COMPLETED",
     "createdAt": "2026-08-27T09:48:22.636Z",
     "updatedAt": "2026-08-27T09:48:24.625Z"
+  },
+  {
+    "id": "a1afe4be-b3fd-4790-9e3b-8faadee679fa",
+    "amount": 100,
+    "currency": "NGN",
+    "status": "COMPLETED",
+    "createdAt": "2026-08-27T10:07:03.683Z",
+    "updatedAt": "2026-08-27T10:07:05.706Z"
   }
 ]

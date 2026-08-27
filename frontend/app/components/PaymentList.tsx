@@ -3,21 +3,32 @@
 import { useEffect, useState } from 'react';
 import { listPayments, ApiError, type Payment } from '@/lib/api';
 
-export interface PaymentListHandle {
-  refresh: () => void;
-}
-
 interface Props {
-  /** Bumped by the parent whenever a new payment is created, to trigger a refresh. */
+  /** Bumped by the parent whenever a new payment is created, to trigger an immediate refresh. */
   refreshSignal: number;
 }
 
+const TERMINAL_STATUSES = ['COMPLETED', 'FAILED'];
+const POLL_INTERVAL_MS = 2000;
+
 /**
- * Shows every stored payment as a simple table. Re-fetches whenever
- * `refreshSignal` changes (the parent bumps this after a successful
- * creation) — this is a simple, explicit refresh trigger rather than
- * its own polling loop, since `PaymentLookup` already owns the
- * "watch one payment change over time" responsibility.
+ * Shows every stored payment as a simple table.
+ *
+ * Refetches immediately whenever `refreshSignal` changes (the parent
+ * bumps this right after a successful creation), and then keeps
+ * polling on its own as long as ANY visible payment is still
+ * PENDING/PROCESSING — otherwise a payment's status in this table
+ * would only ever update the next time a *different* payment was
+ * created, leaving stale statuses visible until an unrelated action
+ * happened to trigger a refetch. Polling stops automatically once
+ * every payment has reached a terminal state, and resumes on its own
+ * if a new payment is created (which restarts this effect via
+ * `refreshSignal`).
+ *
+ * The self-rescheduling `setTimeout` pattern here (rather than a
+ * naive `setInterval`) avoids overlapping requests if a fetch ever
+ * takes longer than the poll interval — the same pattern
+ * `PaymentLookup` uses for a single payment.
  */
 export function PaymentList({ refreshSignal }: Props) {
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -26,25 +37,39 @@ export function PaymentList({ refreshSignal }: Props) {
 
   useEffect(() => {
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
 
-    setLoading(true);
-    listPayments()
-      .then((data) => {
-        if (!cancelled) setPayments(data);
-      })
-      .catch((err) => {
+    async function fetchAndScheduleNext() {
+      try {
+        const data = await listPayments();
+        if (cancelled) return;
+
+        setPayments(data);
+        setError(null);
+
+        const hasActivePayment = data.some(
+          (p) => !TERMINAL_STATUSES.includes(p.status),
+        );
+        if (hasActivePayment) {
+          timer = setTimeout(fetchAndScheduleNext, POLL_INTERVAL_MS);
+        }
+      } catch (err) {
         if (!cancelled) {
           setError(
             err instanceof ApiError ? err.message : 'Could not load payments.',
           );
         }
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    }
+
+    setLoading(true);
+    fetchAndScheduleNext();
 
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   }, [refreshSignal]);
 
