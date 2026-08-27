@@ -1,36 +1,82 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Payment Service — Demo Frontend
 
-## Getting Started
+A small Next.js frontend for the [Payment Processing Microservice](../payment-service) backend. Lets you create a payment, watch it move through its async processing lifecycle in real time, and see a list of everything created.
 
-First, run the development server:
+This is a **bonus/demo UI**, not a required deliverable — it exists to exercise the backend API visually rather than only via `curl`/Postman/Swagger.
+
+## Features
+
+- **Create a payment** — simple form (amount, currency, optional description)
+- **Live status tracking** — after creating a payment, watch it move from `PENDING` → `PROCESSING` → `COMPLETED`/`FAILED` automatically, via polling every 1.5s
+- **Payment list** — a table of every payment created, refreshing after each new submission
+
+## Prerequisites
+
+- Node.js 20+ and npm
+- The backend running and reachable (see the [backend README](../payment-service/README.md) — it needs Redis running too)
+
+## Setup
+
+```bash
+npm install
+cp .env.local.example .env.local
+```
+
+Edit `.env.local` if your backend isn't running on the defaults:
+
+```bash
+NEXT_PUBLIC_API_URL=http://localhost:3000
+NEXT_PUBLIC_API_KEY=dev-local-api-key
+```
+
+`NEXT_PUBLIC_API_KEY` must match the backend's own `API_KEY` — if the backend uses the default (`dev-local-api-key`), leave this as-is.
+
+## Running
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+**Port conflict note:** both this app and the backend default to port 3000. If you're running both locally, start one on a different port:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run dev -- -p 3001
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Then open `http://localhost:3001` (or whichever port you chose) in your browser.
 
-## Learn More
+## Project Structure
 
-To learn more about Next.js, take a look at the following resources:
+payment-service-ui/
+├── app/
+│ ├── page.tsx # Main page — wires the three panels together
+│ ├── layout.tsx
+│ ├── globals.css
+│ └── components/
+│ ├── CreatePaymentForm.tsx # Payment creation form
+│ ├── PaymentLookup.tsx # Single-payment status view, with polling
+│ └── PaymentList.tsx # Table of all payments
+├── lib/
+│ └── api.ts # API client — all backend calls go through here
+└── .env.local.example
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+`lib/api.ts` is the only file that knows about the backend's URL, headers, and error shape — every component calls its typed functions (`createPayment`, `getPayment`, `listPayments`) rather than calling `fetch()` directly.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## How It Talks to the Backend
 
-## Deploy on Vercel
+- Every request includes the `x-api-key` header, since the backend requires it on all `/payments` routes.
+- `POST /payments` includes a fresh `Idempotency-Key` (a UUID, generated per submission) — this is what lets the backend safely dedupe a retried request without you having to think about it in the UI.
+- `PaymentLookup` polls `GET /payments/:id` every 1.5 seconds until the payment reaches a terminal status (`COMPLETED` or `FAILED`), then stops automatically.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Known Limitation — API Key Exposure
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+`NEXT_PUBLIC_API_KEY` is bundled directly into the browser JavaScript at build time — this is how Next.js's `NEXT_PUBLIC_*` variables work, and it means the key is visible to anyone who opens browser dev tools. This is acceptable for a local demo, but **not** how a production frontend should handle a secret.
+
+A real production setup would add a Next.js API route (a server-side file) that holds the real key server-side and proxies requests to the backend — the browser would then only ever talk to your own Next.js server, never directly to the backend with a visible credential. This wasn't built here, since it adds meaningful complexity for what is explicitly a bonus/demo UI, not the graded deliverable.
+
+## Build for Production
+
+```bash
+npm run build
+npm run start
+```
