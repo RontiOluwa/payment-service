@@ -2,14 +2,6 @@
 
 A payment processing microservice built with NestJS, plus a demo Next.js frontend to exercise it visually.
 
-## Structure
-
-.
-├── payment-service/ # Backend — API + worker (Node.js/NestJS)
-└── payment-service-ui/ # Frontend — demo UI (Next.js)
-
-These are two separate projects, each with their own `package.json`, dependencies, and README. There's no shared build step between them — set each one up independently.
-
 ## Quick Start
 
 ### 1. Backend
