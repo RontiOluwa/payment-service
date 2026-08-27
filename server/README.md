@@ -65,8 +65,6 @@ Once the API is running:
 - Interactive API docs (Swagger UI): `http://localhost:1000/docs`
 - Liveness check: `GET http://localhost:1000/health` (no auth required)
 
-**Port conflict note:** if you're also running the [demo frontend](../payment-service-ui), it defaults to port 1000 too — run one of them on a different port.
-
 ## Authentication
 
 Every `/payments` route requires a matching `x-api-key` header. Requests without one, or with an incorrect value, are rejected with `401`.
